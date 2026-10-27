@@ -1,0 +1,92 @@
+@import "tailwindcss";
+
+@layer utilities {
+  .font-serif-title {
+    font-family: 'Instrument Serif', Georgia, serif;
+  }
+  .font-handwriting {
+    font-family: 'Caveat', cursive;
+  }
+  
+  /* Brand exact background tokens */
+  .bg-brand-peach { background-color: #FFD2A0; }
+  .bg-brand-pink { background-color: #EFB6C8; }
+  .bg-brand-mauve { background-color: #8174A0; }
+  .bg-brand-lavender { background-color: #A888B5; }
+  .bg-reprox-cream { background-color: #FAF7F2; }
+  .bg-reprox-ivory { background-color: #FFFDF9; }
+  .bg-reprox-blush { background-color: #FBF0F3; }
+
+  /* Brand text tokens */
+  .text-brand-peach { color: #FFD2A0; }
+  .text-brand-pink { color: #EFB6C8; }
+  .text-brand-mauve { color: #8174A0; }
+  .text-brand-lavender { color: #A888B5; }
+  .text-reprox-ink { color: #1F1A24; }
+  .text-reprox-muted { color: #6B6275; }
+
+  /* Brand border tokens */
+  .border-brand-peach { border-color: #FFD2A0; }
+  .border-brand-pink { border-color: #EFB6C8; }
+  .border-brand-mauve { border-color: #8174A0; }
+  .border-brand-lavender { border-color: #A888B5; }
+  .border-reprox-subtle { border-color: #EBE7DF; }
+}
+
+@layer base {
+  :root {
+    --brand-peach: #FFD2A0;
+    --brand-pink: #EFB6C8;
+    --brand-mauve: #8174A0;
+    --brand-lavender: #A888B5;
+    --bg-cream: #FAF7F2;
+    --bg-ivory: #FFFDF9;
+    --bg-blush: #FBF0F3;
+    --text-ink: #1F1A24;
+    --text-muted: #6B6275;
+    --border-subtle: #EBE7DF;
+    color-scheme: light;
+  }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: #FAF7F2;
+    color: #1F1A24;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  #root {
+    width: 100%;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* Custom sleek scrollbar matching cream & mauve palette */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #FAF7F2;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #D8D2C5;
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #8174A0;
+  }
+}
