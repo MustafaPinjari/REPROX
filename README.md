@@ -36,20 +36,23 @@ REPROX/
 │
 ├── .gitignore          # Monorepo git exclusion rules
 ├── .env.example        # Environment variable template
+├── VERCEL_FRONTEND_RENDER_BACKEND_GUIDE.md # Frontend on Vercel + Backend & DB on Render (Free)
 ├── FREE_DEPLOYMENT_GUIDE.md   # 100% FREE ($0.00, No Credit Card) full-stack deployment
 ├── VERCEL_DEPLOYMENT_GUIDE.md # 1-click Vercel hosting instructions
+├── render.yaml         # Render 1-click Blueprint for Backend & PostgreSQL DB
 ├── netlify.toml        # Netlify SPA build configuration
 └── vercel.json         # Vercel SPA routing and build configuration
 ```
 
 ---
 
-## 🚀 100% Free Deployment ($0.00 Forever, No Credit Card)
+## 🚀 Recommended Deployment: Vercel (Frontend) + Render (Backend & DB)
 
-To deploy the entire full-stack application (Frontend + Backend + PostgreSQL Database) completely free with zero cost, see **[FREE_DEPLOYMENT_GUIDE.md](file:///c:/Users/mustafa/Desktop/REPROX/FREE_DEPLOYMENT_GUIDE.md)**:
-- **Frontend**: Vercel or Netlify (100% Free Hobby Tier)
-- **Backend**: Render.com (100% Free Web Service Tier)
-- **Database**: Neon.tech (100% Free Serverless PostgreSQL Forever)
+To deploy the **Frontend on Vercel** and **Both Backend & Database on Render** (100% Free, No Credit Card), see **[VERCEL_FRONTEND_RENDER_BACKEND_GUIDE.md](file:///c:/Users/mustafa/Desktop/REPROX/VERCEL_FRONTEND_RENDER_BACKEND_GUIDE.md)**:
+- **Frontend on Vercel**: High-speed edge CDN for React 19 + TypeScript SPA.
+- **Backend on Render**: Full Linux container running Django 6 + Gunicorn via [render.yaml](file:///c:/Users/mustafa/Desktop/REPROX/render.yaml).
+- **Database on Render**: Free managed PostgreSQL database (`reprox-db`) linked via internal network.
+
 
 
 ---

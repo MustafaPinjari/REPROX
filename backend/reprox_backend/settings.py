@@ -72,20 +72,27 @@ WSGI_APPLICATION = 'reprox_backend.wsgi.application'
 # Database Configuration
 # Local development uses SQLite3; Production uses PostgreSQL via DATABASE_URL or POSTGRES_ variables
 DATABASE_URL = os.getenv('DATABASE_URL')
-if DATABASE_URL and DATABASE_URL.startswith('postgres'):
-    import urllib.parse
-    parsed = urllib.parse.urlparse(DATABASE_URL)
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.postgresql',
-            'NAME': parsed.path.lstrip('/'),
-            'USER': parsed.username,
-            'PASSWORD': parsed.password,
-            'HOST': parsed.hostname,
-            'PORT': parsed.port or 5432,
-            'CONN_MAX_AGE': 600,
+if DATABASE_URL and (DATABASE_URL.startswith('postgres://') or DATABASE_URL.startswith('postgresql://')):
+    try:
+        import importlib
+        dj_db = importlib.import_module('dj_database_url')
+        DATABASES = {
+            'default': dj_db.parse(DATABASE_URL, conn_max_age=600)
         }
-    }
+    except Exception:
+        import urllib.parse
+        parsed = urllib.parse.urlparse(DATABASE_URL)
+        DATABASES = {
+            'default': {
+                'ENGINE': 'django.db.backends.postgresql',
+                'NAME': parsed.path.lstrip('/'),
+                'USER': parsed.username,
+                'PASSWORD': parsed.password,
+                'HOST': parsed.hostname,
+                'PORT': parsed.port or 5432,
+                'CONN_MAX_AGE': 600,
+            }
+        }
 else:
     DATABASES = {
         'default': {
@@ -122,8 +129,7 @@ STATIC_URL = 'static/'
 STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # CORS & CSRF configuration
-# Disallow wildcards in production; allow strict origin list
-CORS_ALLOW_ALL_ORIGINS = False
+CORS_ALLOW_ALL_ORIGINS = os.getenv('CORS_ALLOW_ALL_ORIGINS', 'False').lower() in ('true', '1')
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOWED_ORIGINS = [
     'http://localhost:3000',
@@ -131,12 +137,40 @@ CORS_ALLOWED_ORIGINS = [
     'http://localhost:5173',
     'http://127.0.0.1:5173',
 ]
+
+# Automatically permit Vercel and Netlify production & preview domains
+CORS_ALLOWED_ORIGIN_REGEXES = [
+    r"^https://.*\.vercel\.app$",
+    r"^https://.*\.netlify\.app$",
+    r"^https://.*\.onrender\.com$",
+]
+
+extra_cors = os.getenv('CORS_ALLOWED_ORIGINS', '')
+if extra_cors:
+    if extra_cors.strip() == '*':
+        CORS_ALLOW_ALL_ORIGINS = True
+    else:
+        for origin in extra_cors.split(','):
+            cleaned = origin.strip()
+            if cleaned and cleaned not in CORS_ALLOWED_ORIGINS:
+                CORS_ALLOWED_ORIGINS.append(cleaned)
+
 CSRF_TRUSTED_ORIGINS = [
     'http://localhost:3000',
     'http://127.0.0.1:3000',
     'http://localhost:5173',
     'http://127.0.0.1:5173',
+    'https://*.vercel.app',
+    'https://*.netlify.app',
+    'https://*.onrender.com',
 ]
+
+extra_csrf = os.getenv('CSRF_TRUSTED_ORIGINS', '')
+if extra_csrf:
+    for origin in extra_csrf.split(','):
+        cleaned = origin.strip()
+        if cleaned and cleaned not in CSRF_TRUSTED_ORIGINS:
+            CSRF_TRUSTED_ORIGINS.append(cleaned)
 
 # REST Framework configuration
 REST_FRAMEWORK = {
