@@ -19,7 +19,7 @@ import { AppShell, type AppSection } from './components/layout/AppShell';
 import type { BuildMode, RecordedEvent, TestExecutionResult, VoiceBugReport } from './types';
 import { generatePlaywrightTestScript } from './services/playwrightGenerator';
 import { executePlaywrightTest } from './services/testRunner';
-import { parseWisprVoiceIntent } from './services/voiceDictationEngine';
+import { parseWisprVoiceIntent, synthesizeTimelineEventsForReport } from './services/voiceDictationEngine';
 import { sanitizeInputValue } from './services/privacyScrubber';
 
 export type AppView =
@@ -68,6 +68,7 @@ export function App() {
     return 'home';
   });
 
+  const [incidentsTab, setIncidentsTab] = useState<'list' | 'sandbox'>('sandbox');
   const [userEmail, setUserEmail] = useState<string>('mustafa@example.com');
 
   const [buildMode, setBuildMode] = useState<BuildMode>(() => {
@@ -137,7 +138,7 @@ export function App() {
     isListening: false,
   });
 
-  // Initial timeline events capturing the invoice GST scenario
+  // Initial timeline events
   const [events, setEvents] = useState<RecordedEvent[]>([
     {
       id: 'EVT-1',
@@ -214,6 +215,30 @@ export function App() {
     setGeneratedCode(code);
   }, []);
 
+  // Launch from New Incident directly into Sandbox with dynamic events
+  const handleLaunchSandbox = useCallback(
+    (updatedReport?: VoiceBugReport) => {
+      const activeReport = updatedReport || voiceReport;
+      setVoiceReport(activeReport);
+
+      const dynamicEvents = synthesizeTimelineEventsForReport(
+        activeReport.rawTranscript,
+        activeReport.detectedIntent
+      );
+      setEvents(dynamicEvents);
+
+      const code = generatePlaywrightTestScript(dynamicEvents);
+      setGeneratedCode(code);
+
+      setBuggyResult(undefined);
+      setFixedResult(undefined);
+
+      setIncidentsTab('sandbox');
+      setCurrentSection('incidents');
+    },
+    [voiceReport]
+  );
+
   // Add recorded event with automatic zero-trust privacy scrubber
   const handleRecordEvent = useCallback(
     (eventData: Omit<RecordedEvent, 'id' | 'timestamp' | 'isPiiMasked'>) => {
@@ -242,24 +267,26 @@ export function App() {
   const handleVoiceReportReceived = useCallback(
     (report: VoiceBugReport) => {
       setVoiceReport(report);
-      if (report.detectedIntent?.feature?.includes('invoice') || report.detectedIntent?.feature === 'invoice-gstin') {
-        handleRecordEvent({
-          type: 'assert',
-          selector: '[role="alert"]',
-          targetRole: 'alert',
-          value: 'GSTIN is required for commercial invoices.',
-          description: 'Assertion: GST validation alert must be displayed',
-        });
-      }
+      const dynamicEvents = synthesizeTimelineEventsForReport(
+        report.rawTranscript,
+        report.detectedIntent
+      );
+      setEvents(dynamicEvents);
+      const code = generatePlaywrightTestScript(dynamicEvents);
+      setGeneratedCode(code);
     },
-    [handleRecordEvent]
+    []
   );
 
   // Execute test against buggy build (v1.0.4)
   const runBuggyTest = async () => {
     setIsExecutingBuggy(true);
     try {
-      const result = await executePlaywrightTest({ buildMode: 'buggy' });
+      const result = await executePlaywrightTest({
+        buildMode: 'buggy',
+        events,
+        scenarioTitle: voiceReport.detectedIntent.actionTaken,
+      });
       setBuggyResult(result);
     } catch (err) {
       console.error('Execution against buggy build failed to trigger:', err);
@@ -272,7 +299,11 @@ export function App() {
   const runFixedTest = async () => {
     setIsExecutingFixed(true);
     try {
-      const result = await executePlaywrightTest({ buildMode: 'fixed' });
+      const result = await executePlaywrightTest({
+        buildMode: 'fixed',
+        events,
+        scenarioTitle: voiceReport.detectedIntent.actionTaken,
+      });
       setFixedResult(result);
     } catch (err) {
       console.error('Execution against fixed build failed to trigger:', err);
@@ -303,7 +334,7 @@ export function App() {
     );
   }
 
-  // 2. Authentication View (matching user reference image)
+  // 2. Authentication View
   if (currentView === 'auth') {
     return (
       <AuthPage
@@ -389,7 +420,10 @@ export function App() {
       {/* Sub-page 1: Home Dashboard */}
       {currentSection === 'home' && (
         <HomePage
-          onNavigateToIncidents={() => setCurrentSection('incidents')}
+          onNavigateToIncidents={() => {
+            setIncidentsTab('list');
+            setCurrentSection('incidents');
+          }}
           onNavigateToNewIncident={() => setCurrentSection('new-incident')}
           onNavigateToTestStudio={() => setCurrentSection('test-studio')}
         />
@@ -400,11 +434,11 @@ export function App() {
         <NewIncidentPage
           voiceReport={voiceReport}
           onUpdateVoiceReport={setVoiceReport}
-          onLaunchSandbox={() => setCurrentSection('incidents')}
+          onLaunchSandbox={handleLaunchSandbox}
         />
       )}
 
-      {/* Sub-page 3: Incidents & Interactive Invoice Sandbox */}
+      {/* Sub-page 3: Incidents & Interactive Target Sandbox */}
       {currentSection === 'incidents' && (
         <IncidentsPage
           onNavigateToNewIncident={() => setCurrentSection('new-incident')}
@@ -417,6 +451,8 @@ export function App() {
               window.history.replaceState({}, '', url.toString());
             }
           }}
+          activeTab={incidentsTab}
+          onActiveTabChange={setIncidentsTab}
           events={events}
           onRecordEvent={handleRecordEvent}
           onToggleRecording={() => setIsRecording((prev) => !prev)}
@@ -451,7 +487,10 @@ export function App() {
       {/* Sub-page 5: Execution Logs */}
       {currentSection === 'logs' && (
         <LogsPage
-          onNavigateToSandbox={() => setCurrentSection('incidents')}
+          onNavigateToSandbox={() => {
+            setIncidentsTab('sandbox');
+            setCurrentSection('incidents');
+          }}
           onNavigateToStudio={() => setCurrentSection('test-studio')}
         />
       )}

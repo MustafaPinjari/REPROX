@@ -12,6 +12,7 @@ import {
   Sparkles,
   Download,
   Layers,
+  Play,
 } from 'lucide-react';
 import type { BuildMode, RecordedEvent, TestExecutionResult, VoiceBugReport } from '../types';
 import { WisprFlowBar } from '../components/voice/WisprFlowBar';
@@ -42,6 +43,8 @@ interface IncidentsPageProps {
   isExecutingFixed: boolean;
   voiceReport: VoiceBugReport;
   onVoiceReportReceived: (report: VoiceBugReport) => void;
+  activeTab?: 'list' | 'sandbox';
+  onActiveTabChange?: (tab: 'list' | 'sandbox') => void;
 }
 
 export const IncidentsPage: React.FC<IncidentsPageProps> = ({
@@ -63,16 +66,25 @@ export const IncidentsPage: React.FC<IncidentsPageProps> = ({
   isExecutingFixed,
   voiceReport,
   onVoiceReportReceived,
+  activeTab: controlledActiveTab,
+  onActiveTabChange,
 }) => {
-  const [activeTab, setActiveTab] = useState<'list' | 'sandbox'>(() => {
+  const [internalTab, setInternalTab] = useState<'list' | 'sandbox'>(() => {
     if (typeof window !== 'undefined') {
       const p = new URLSearchParams(window.location.search);
       if (p.get('mode') === 'fixed' || p.get('mode') === 'buggy' || p.get('tab') === 'sandbox') {
         return 'sandbox';
       }
     }
-    return 'list';
+    return 'sandbox';
   });
+
+  const activeTab = controlledActiveTab ?? internalTab;
+  const setActiveTab = (tab: 'list' | 'sandbox') => {
+    setInternalTab(tab);
+    if (onActiveTabChange) onActiveTabChange(tab);
+  };
+
   const [filterMode, setFilterMode] = useState<'all' | 'buggy' | 'fixed' | 'review'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [showReportModal, setShowReportModal] = useState(false);
@@ -98,8 +110,21 @@ export const IncidentsPage: React.FC<IncidentsPageProps> = ({
     return () => { isMounted = false; };
   }, [filterMode, searchQuery]);
 
-  const filteredIncidents = incidents;
+  // Construct active incident item so user always sees their spoken scenario
+  const activeIncidentItem = {
+    id: voiceReport.id || 'INC-104',
+    title: voiceReport.detectedIntent.actionTaken || 'Voice Incident Reproduction',
+    description: voiceReport.rawTranscript,
+    status: buildMode,
+    statusLabel: buildMode === 'buggy' ? 'Buggy (v1.0.4)' : 'Fixed (v1.0.5)',
+    badgeColor: buildMode === 'buggy' ? 'bg-[#FBF0F3] text-[#C27891] border-[#EFB6C8]' : 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7]',
+    iconColor: buildMode === 'buggy' ? 'bg-[#FBF0F3] text-[#C27891] border-[#EFB6C8]' : 'bg-[#E8F5E9] text-[#2E7D32] border-[#A5D6A7]',
+    time: 'Active Dictation',
+    tags: [voiceReport.detectedIntent.feature || 'e-commerce-cart', 'playwright', 'sandbox'],
+    specFile: buildMode === 'buggy' ? 'repro-buggy.spec.ts' : 'repro-fixed.spec.ts',
+  };
 
+  const filteredIncidents = incidents.length > 0 ? incidents : [activeIncidentItem];
 
   return (
     <div className="space-y-6 animate-fadeIn font-sans">
@@ -252,103 +277,110 @@ export const IncidentsPage: React.FC<IncidentsPageProps> = ({
               <div className="w-12 h-12 rounded-2xl bg-[#FAF7F2] border border-[#EBE7DF] text-[#8174A0] flex items-center justify-center mx-auto mb-3">
                 <FileCode className="w-6 h-6" />
               </div>
-              <h3 className="text-sm font-bold text-[#1F1A24] mb-1">No incidents recorded yet</h3>
+              <h3 className="text-sm font-bold text-[#1F1A24] mb-1">No incidents match current filter</h3>
               <p className="text-xs text-[#6B6275] max-w-sm mx-auto mb-4">
-                {searchQuery || filterMode !== 'all'
-                  ? 'No incidents matched your current search or status filter.'
-                  : 'Capture and reproduce your first application issue using hands-free voice or the interactive sandbox.'}
+                No incidents found for search "{searchQuery}". You can return to the active reproduction sandbox or dictate a new incident.
               </p>
-              <button
-                onClick={onNavigateToNewIncident}
-                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#8174A0] hover:bg-[#6f638d] text-white text-xs font-semibold shadow-xs cursor-pointer transition-all"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Create Your First Incident</span>
-              </button>
+              <div className="flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setActiveTab('sandbox')}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#8174A0] hover:bg-[#6f638d] text-white text-xs font-semibold shadow-xs cursor-pointer transition-all"
+                >
+                  <Play className="w-3.5 h-3.5 text-[#FFD2A0]" />
+                  <span>Launch Reproduction Sandbox</span>
+                </button>
+                <button
+                  onClick={onNavigateToNewIncident}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-[#FAF7F2] border border-[#D8D2C5] hover:bg-[#F3EFE6] text-[#1F1A24] text-xs font-semibold cursor-pointer transition-all"
+                >
+                  <Plus className="w-3.5 h-3.5 text-[#8174A0]" />
+                  <span>+ Create Incident</span>
+                </button>
+              </div>
             </div>
           ) : (
             <div className="bg-[#FFFDF9] rounded-2xl border border-[#EBE7DF] shadow-xs overflow-hidden divide-y divide-[#EBE7DF]">
               {filteredIncidents.map((inc) => (
-              <div
-                key={inc.id}
-                onClick={() => {
-                  if (inc.status === 'buggy') onBuildModeChange('buggy');
-                  if (inc.status === 'fixed') onBuildModeChange('fixed');
-                  setActiveTab('sandbox');
-                }}
-                className="p-4 sm:p-5 hover:bg-[#FAF7F2] transition-colors cursor-pointer flex items-center justify-between gap-4 group"
-              >
-                <div className="flex items-start gap-3.5 min-w-0">
-                  <input
-                    type="checkbox"
-                    className="mt-1 w-4 h-4 rounded border-[#D8D2C5] text-[#8174A0] accent-[#8174A0]"
-                    onClick={(e) => e.stopPropagation()}
-                  />
+                <div
+                  key={inc.id}
+                  onClick={() => {
+                    if (inc.status === 'buggy') onBuildModeChange('buggy');
+                    if (inc.status === 'fixed') onBuildModeChange('fixed');
+                    setActiveTab('sandbox');
+                  }}
+                  className="p-4 sm:p-5 hover:bg-[#FAF7F2] transition-colors cursor-pointer flex items-center justify-between gap-4 group"
+                >
+                  <div className="flex items-start gap-3.5 min-w-0">
+                    <input
+                      type="checkbox"
+                      className="mt-1 w-4 h-4 rounded border-[#D8D2C5] text-[#8174A0] accent-[#8174A0]"
+                      onClick={(e) => e.stopPropagation()}
+                    />
 
-                  {/* Icon badge */}
-                  <div
-                    className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${inc.iconColor} group-hover:scale-105 transition-transform`}
-                  >
-                    {inc.status === 'buggy' ? (
-                      <AlertTriangle className="w-4 h-4" />
-                    ) : inc.status === 'fixed' ? (
-                      <CheckCircle2 className="w-4 h-4" />
-                    ) : (
-                      <FileCode className="w-4 h-4" />
-                    )}
-                  </div>
-
-                  {/* Title & description */}
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-xs font-mono font-bold text-[#8174A0]">{inc.id}</span>
-                      <span className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${inc.badgeColor}`}>
-                        {inc.statusLabel}
-                      </span>
-                      <span className="text-[11px] text-[#9E95A8] hidden md:inline">{inc.time}</span>
+                    {/* Icon badge */}
+                    <div
+                      className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 ${inc.iconColor} group-hover:scale-105 transition-transform`}
+                    >
+                      {inc.status === 'buggy' ? (
+                        <AlertTriangle className="w-4 h-4" />
+                      ) : inc.status === 'fixed' ? (
+                        <CheckCircle2 className="w-4 h-4" />
+                      ) : (
+                        <FileCode className="w-4 h-4" />
+                      )}
                     </div>
 
-                    <h3 className="text-sm font-bold text-[#1F1A24] truncate group-hover:text-[#8174A0] transition-colors">
-                      {inc.title}
-                    </h3>
-                    <p className="text-xs text-[#6B6275] truncate mt-0.5">{inc.description}</p>
-
-                    {/* Tag badges */}
-                    <div className="flex items-center gap-1.5 mt-2">
-                      {(inc.tags || []).map((t: string) => (
-                        <span
-                          key={t}
-                          className="text-[10px] px-2 py-0.5 rounded-md bg-[#FAF7F2] border border-[#EBE7DF] text-[#6B6275] font-medium"
-                        >
-                          {t}
+                    {/* Title & description */}
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-xs font-mono font-bold text-[#8174A0]">{inc.id}</span>
+                        <span className={`text-[10px] font-bold px-2 py-0.2 rounded-full border ${inc.badgeColor}`}>
+                          {inc.statusLabel}
                         </span>
-                      ))}
+                        <span className="text-[11px] text-[#9E95A8] hidden md:inline">{inc.time}</span>
+                      </div>
+
+                      <h3 className="text-sm font-bold text-[#1F1A24] truncate group-hover:text-[#8174A0] transition-colors">
+                        {inc.title}
+                      </h3>
+                      <p className="text-xs text-[#6B6275] truncate mt-0.5">{inc.description}</p>
+
+                      {/* Tag badges */}
+                      <div className="flex items-center gap-1.5 mt-2">
+                        {(inc.tags || []).map((t: string) => (
+                          <span
+                            key={t}
+                            className="text-[10px] px-2 py-0.5 rounded-md bg-[#FAF7F2] border border-[#EBE7DF] text-[#6B6275] font-medium"
+                          >
+                            {t}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Right Spec badge & Action */}
-                <div className="flex items-center gap-3 shrink-0">
-                  <span className="hidden sm:inline-block font-mono text-xs px-2.5 py-1 rounded-lg bg-[#FAF7F2] border border-[#EBE7DF] text-[#1F1A24]">
-                    {inc.specFile}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setActiveTab('sandbox');
-                    }}
-                    className="p-1 text-[#9E95A8] hover:text-[#1F1A24]"
-                  >
-                    <MoreHorizontal className="w-4 h-4" />
-                  </button>
-                  <ChevronRight className="w-4 h-4 text-[#9E95A8] group-hover:text-[#8174A0] group-hover:translate-x-0.5 transition-all" />
+                  {/* Right Spec badge & Action */}
+                  <div className="flex items-center gap-3 shrink-0">
+                    <span className="hidden sm:inline-block font-mono text-xs px-2.5 py-1 rounded-lg bg-[#FAF7F2] border border-[#EBE7DF] text-[#1F1A24]">
+                      {inc.specFile}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setActiveTab('sandbox');
+                      }}
+                      className="p-1 text-[#9E95A8] hover:text-[#1F1A24] cursor-pointer"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
+                    <ChevronRight className="w-4 h-4 text-[#9E95A8] group-hover:text-[#8174A0] group-hover:translate-x-0.5 transition-all" />
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    ) : (
+              ))}
+            </div>
+          )}
+        </div>
+      ) : (
         /* ─────────────────────────────────────────────────────────── */
         /* VIEW B: INTERACTIVE SANDBOX & PLAYWRIGHT TEST RUNNER VIEW */
         /* ─────────────────────────────────────────────────────────── */
@@ -356,13 +388,13 @@ export const IncidentsPage: React.FC<IncidentsPageProps> = ({
           <div className="flex items-center justify-between pb-2">
             <button
               onClick={() => setActiveTab('list')}
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8174A0] hover:text-[#1F1A24] transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8174A0] hover:text-[#1F1A24] transition-colors cursor-pointer"
             >
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Back to Incidents List</span>
             </button>
             <span className="text-xs text-[#6B6275]">
-              Active Incident: <strong className="text-[#1F1A24]">INC-104 ({voiceReport.detectedIntent.feature || 'Invoice GST Validation'})</strong>
+              Active Incident: <strong className="text-[#1F1A24]">{voiceReport.id || 'INC-104'} ({voiceReport.detectedIntent.feature || 'Application Verification'})</strong>
             </span>
           </div>
 
@@ -374,7 +406,7 @@ export const IncidentsPage: React.FC<IncidentsPageProps> = ({
 
           {/* Dual Column Sandbox & Test Verifier */}
           <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-            {/* Left: Commercial Invoice App Sandbox & Timeline */}
+            {/* Left: Interactive Target App Sandbox & Timeline */}
             <div className="xl:col-span-6 space-y-6 flex flex-col">
               <div className="h-[460px]">
                 <InvoiceAppSandbox
@@ -382,6 +414,8 @@ export const IncidentsPage: React.FC<IncidentsPageProps> = ({
                   onToggleBuildMode={onBuildModeChange}
                   onRecordEvent={onRecordEvent}
                   isRecording={isRecording}
+                  scenarioFeature={voiceReport.detectedIntent.feature}
+                  scenarioTitle={voiceReport.detectedIntent.actionTaken}
                 />
               </div>
 

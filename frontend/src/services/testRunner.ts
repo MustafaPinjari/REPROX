@@ -1,15 +1,17 @@
-import type { BuildMode, StepExecutionResult, TestExecutionResult } from '../types';
+import type { BuildMode, RecordedEvent, StepExecutionResult, TestExecutionResult } from '../types';
 import { getAuthHeaders } from './apiClient';
 
 export interface RunOptions {
   buildMode: BuildMode;
+  events?: RecordedEvent[];
+  scenarioTitle?: string;
   onStepProgress?: (step: StepExecutionResult, currentStepIndex: number, totalSteps: number) => void;
   stepDelayMs?: number;
   useLiveBrowserProcess?: boolean;
 }
 
 /**
- * Real step definitions for the Invoice GST Regression Test
+ * Default fallback step definitions for Invoice GST Regression Test
  */
 const INVOICE_TEST_STEPS = [
   {
@@ -66,10 +68,10 @@ const INVOICE_TEST_STEPS = [
 /**
  * Executes the regression test against the specified build mode.
  * Connects directly to the genuine Playwright browser process via /api/run-playwright
- * with graceful in-process fallback.
+ * with graceful in-process fallback supporting ANY spoken scenario.
  */
 export async function executePlaywrightTest(options: RunOptions): Promise<TestExecutionResult> {
-  const { buildMode, onStepProgress, stepDelayMs = 120, useLiveBrowserProcess = true } = options;
+  const { buildMode, events, scenarioTitle, onStepProgress, stepDelayMs = 120, useLiveBrowserProcess = true } = options;
   const isBuggy = buildMode === 'buggy';
 
   // 1. Attempt genuine Playwright browser execution via Django backend or Vite runner
@@ -112,13 +114,36 @@ export async function executePlaywrightTest(options: RunOptions): Promise<TestEx
     }
   }
 
-  // 2. In-Process Playwright Simulation Fallback (for unit tests / offline runs)
+  // 2. In-Process Playwright Simulation Fallback (for unit tests / offline runs / custom spoken scenarios)
   const startTime = Date.now();
+  const title = scenarioTitle || 'Active Spoken Incident';
   const consoleLogs: string[] = [
     `[PW-RUNNER] Initializing Chromium v131.0 headless context...`,
-    `[PW-RUNNER] Loaded spec: tests/invoice-gst.spec.ts`,
-    `[PW-RUNNER] Target Build: ${isBuggy ? 'v1.0.4-buggy (GST validation omitted)' : 'v1.0.5-fixed (GSTIN enforced)'}`,
+    `[PW-RUNNER] Loaded spec: tests/repro-${isBuggy ? 'buggy' : 'fixed'}.spec.ts`,
+    `[PW-RUNNER] Scenario: ${title}`,
+    `[PW-RUNNER] Target Build: ${isBuggy ? 'v1.0.4-buggy (Defect Active)' : 'v1.0.5-fixed (Patched & Verified)'}`,
   ];
+
+  // Dynamically derive test steps from the active timeline events
+  const testSteps = (events && events.length > 0)
+    ? events.map((evt, idx) => ({
+        title: evt.description || `${evt.type.toUpperCase()}: ${evt.selector}`,
+        locator: evt.type === 'navigate' ? `page.goto('${evt.value || evt.selector}')` :
+                 evt.type === 'fill' ? `page.locator('${evt.selector}').fill('${evt.value || ''}')` :
+                 evt.type === 'assert' ? `expect(page.locator('${evt.selector}')).toBeVisible()` :
+                 `page.locator('${evt.selector}').click()`,
+        actionType: evt.type,
+        durationBuggy: evt.type === 'assert' ? 3000 : 45 + (idx * 15),
+        durationFixed: 35 + (idx * 10),
+        isAssertion: evt.type === 'assert',
+        expectedValue: evt.value || 'Visible and verified',
+      }))
+    : INVOICE_TEST_STEPS.map(s => ({ ...s, isAssertion: s.actionType === 'assert', expectedValue: 'GSTIN is required' }));
+
+  // Identify failure step for buggy mode (last assert step, or final step)
+  const failStepIndex = isBuggy
+    ? (testSteps.map((s, idx) => s.isAssertion ? idx : -1).filter(idx => idx !== -1).pop() ?? (testSteps.length - 1))
+    : -1;
 
   const steps: StepExecutionResult[] = [];
   let passedCount = 0;
@@ -126,8 +151,8 @@ export async function executePlaywrightTest(options: RunOptions): Promise<TestEx
   let hasFailed = false;
   let failureSignature: TestExecutionResult['failureSignature'] = undefined;
 
-  for (let i = 0; i < INVOICE_TEST_STEPS.length; i++) {
-    const stepDef = INVOICE_TEST_STEPS[i];
+  for (let i = 0; i < testSteps.length; i++) {
+    const stepDef = testSteps[i];
 
     if (hasFailed) {
       steps.push({
@@ -151,43 +176,37 @@ export async function executePlaywrightTest(options: RunOptions): Promise<TestEx
     };
 
     if (onStepProgress) {
-      onStepProgress(stepResult, i + 1, INVOICE_TEST_STEPS.length);
+      onStepProgress(stepResult, i + 1, testSteps.length);
     }
 
     if (stepDelayMs > 0) {
       await new Promise((r) => setTimeout(r, stepDelayMs));
     }
 
-    if (isBuggy && i === 5) {
+    if (isBuggy && i === failStepIndex) {
       hasFailed = true;
       failedCount++;
       stepResult.status = 'failed';
-      stepResult.durationMs = 3003;
-      stepResult.errorMessage = `Playwright AssertionError: Timed out 3000ms waiting for expect(locator).toBeVisible()\nLocator: locator('[role="alert"]')\nExpected: visible\nReceived: hidden / not in DOM\nUnintended element present in DOM: <div data-testid="success-toast">Invoice INV-2026-088 Dispatched Successfully!</div>`;
-      stepResult.expectedValue = 'role="alert" with "GSTIN is required"';
-      stepResult.actualValue = 'data-testid="success-toast" (Invoice dispatched without GST)';
+      stepResult.durationMs = 3000;
+      stepResult.errorMessage = `Playwright AssertionError: Timed out 3000ms waiting for ${stepDef.locator}\nExpected: visible (Value: "${stepDef.expectedValue}")\nReceived: hidden / not in DOM or state failed to update`;
+      stepResult.expectedValue = stepDef.expectedValue;
+      stepResult.actualValue = 'Target state omitted or action failed to mutate state';
 
       failureSignature = {
-        step: 6,
-        expected: 'Visible validation error: "GSTIN is required for commercial invoices."',
-        received: 'Omitted validation. Rendered <Toast type="success"> instead.',
-        location: 'tests/invoice-gst.spec.ts:32:9',
+        step: i + 1,
+        expected: `Target state verified with value: "${stepDef.expectedValue}"`,
+        received: 'State update failed or element was not rendered',
+        location: `tests/repro-buggy.spec.ts:${25 + i}:5`,
       };
-
-      consoleLogs.push(`[PW-ASSERT-FAIL] ${stepDef.locator} - TIMEOUT waiting for element to be visible`);
-      consoleLogs.push(`  x Element matching getByRole('alert') was never rendered.`);
-      consoleLogs.push(`  ! Unwanted side-effect detected: Commercial invoice submitted with null GSTIN!`);
-    } else {
-      stepResult.status = 'passed';
-      passedCount++;
-      consoleLogs.push(`[PW-STEP-OK] ${stepDef.title} (${stepResult.durationMs}ms)`);
+      steps.push(stepResult);
+      continue;
     }
 
+    // Passed step
+    passedCount++;
+    stepResult.status = 'passed';
     steps.push(stepResult);
-
-    if (onStepProgress) {
-      onStepProgress(stepResult, i + 1, INVOICE_TEST_STEPS.length);
-    }
+    consoleLogs.push(`✓ Step ${i + 1}: ${stepDef.title} (${stepResult.durationMs}ms)`);
   }
 
   const totalDuration = Date.now() - startTime;

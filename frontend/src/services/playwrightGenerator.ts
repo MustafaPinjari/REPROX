@@ -14,6 +14,9 @@ export function formatPlaywrightLocator(event: RecordedEvent): string {
     return `page.getByTestId('${event.targetTestId}')`;
   }
   if (event.selector) {
+    if (event.selector.startsWith('http://') || event.selector.startsWith('https://')) {
+      return `page.goto('${event.selector}')`;
+    }
     return `page.locator('${event.selector}')`;
   }
   return `page.locator('body')`;
@@ -32,23 +35,33 @@ export function generatePlaywrightTestScript(
     expectedErrorMessage?: string;
   }
 ): string {
-  const testName = options?.testName || 'REPRO-104: Block invoice submission when required GSTIN is missing';
-  const targetUrl = options?.targetUrl || 'http://localhost:3000/sandbox/invoice';
-  const expectedErrorMessage = options?.expectedErrorMessage || 'GSTIN is required for commercial invoices.';
+  const testName = options?.testName || 'Spoken Incident Reproduction Verification';
+  const targetUrl = options?.targetUrl || 'http://localhost:3000/sandbox';
+  const expectedErrorMessage = options?.expectedErrorMessage || 'Action completed with verified state';
 
   const stepLines: string[] = [];
 
-  stepLines.push(`  // 1. Navigate to target application sandbox`);
-  stepLines.push(`  await page.goto('${targetUrl}');`);
-  stepLines.push(`  await expect(page).toHaveTitle(/REPROX Sandbox|Invoice/i);`);
-  stepLines.push(``);
+  // 1. Initial navigation if not already in events
+  const hasNavigateStep = events.some((e) => e.type === 'navigate');
+  if (!hasNavigateStep) {
+    stepLines.push(`  // 1. Navigate to target application sandbox`);
+    stepLines.push(`  await page.goto('${targetUrl}');`);
+    stepLines.push(``);
+  }
 
-  let stepCounter = 2;
+  let stepCounter = hasNavigateStep ? 1 : 2;
 
   for (const event of events) {
     const locator = formatPlaywrightLocator(event);
 
     switch (event.type) {
+      case 'navigate': {
+        const url = event.value || event.selector || targetUrl;
+        stepLines.push(`  // ${stepCounter}. ${event.description}`);
+        stepLines.push(`  await page.goto('${url}');`);
+        stepCounter++;
+        break;
+      }
       case 'fill': {
         const val = event.maskedValue || event.value || '';
         stepLines.push(`  // ${stepCounter}. Fill input field: ${event.description}`);
@@ -78,7 +91,6 @@ export function generatePlaywrightTestScript(
         break;
       }
       case 'toast': {
-        // If an erroneous toast appears, record assertion
         stepLines.push(`  // ${stepCounter}. Observe system notification`);
         stepLines.push(`  await expect(${locator}).toBeVisible();`);
         stepCounter++;
@@ -87,29 +99,24 @@ export function generatePlaywrightTestScript(
     }
   }
 
-  // Add the definitive regression assertion
-  stepLines.push(``);
-  stepLines.push(`  // Final Acceptance Assertion (Fails on Buggy Build, Passes on Fixed Build)`);
-  stepLines.push(`  // Expected: Validation error alert should be visible and contain the required GST notice.`);
-  stepLines.push(`  const validationAlert = page.getByRole('alert');`);
-  stepLines.push(`  await expect(validationAlert).toBeVisible({ timeout: 4000 });`);
-  stepLines.push(`  await expect(validationAlert).toContainText('${expectedErrorMessage}');`);
-  stepLines.push(``);
-  stepLines.push(`  // Ensure erroneous success toast is NOT present`);
-  stepLines.push(`  const successToast = page.getByTestId('success-toast');`);
-  stepLines.push(`  await expect(successToast).not.toBeVisible();`);
+  // If events do not have an explicit assertion, append standard regression assertion
+  const hasAssertStep = events.some((e) => e.type === 'assert');
+  if (!hasAssertStep) {
+    stepLines.push(``);
+    stepLines.push(`  // Final Acceptance Assertion (Fails on Buggy Build, Passes on Fixed Build)`);
+    stepLines.push(`  const validationAlert = page.getByRole('alert');`);
+    stepLines.push(`  await expect(validationAlert).toBeVisible({ timeout: 4000 });`);
+    stepLines.push(`  await expect(validationAlert).toContainText('${expectedErrorMessage}');`);
+  }
 
   return `import { test, expect } from '@playwright/test';
 
 /**
  * REPROX Auto-Synthesized Regression Spec
- * Incident ID: REPRO-104
  * Generated automatically from Wispr Flow Voice dictation & DOM telemetry.
- * 
- * Verifies: Commercial Invoicing GSTIN Compliance
- * Behavior: Submissions without a valid GST number MUST be rejected with a visible validation alert.
+ * Test Case: ${testName}
  */
-test.describe('Commercial Invoice Dispatch Compliance', () => {
+test.describe('Automated Incident Reproduction Spec', () => {
   test('${testName}', async ({ page }) => {
 ${stepLines.join('\n')}
   });

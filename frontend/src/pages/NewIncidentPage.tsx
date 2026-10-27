@@ -18,7 +18,7 @@ import { transcribeVoiceApi, parseVoiceIntentApi, createIncidentApi } from '../s
 interface NewIncidentPageProps {
   voiceReport: VoiceBugReport;
   onUpdateVoiceReport: (newReport: VoiceBugReport) => void;
-  onLaunchSandbox: () => void;
+  onLaunchSandbox: (updatedReport?: VoiceBugReport) => void;
 }
 
 export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
@@ -28,7 +28,7 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
 }) => {
   const [isDictating, setIsDictating] = useState(false);
   const [transcript, setTranscript] = useState(voiceReport.rawTranscript);
-  const [showTextInput, setShowTextInput] = useState(false);
+  const [showTextInput, setShowTextInput] = useState(true);
   const [feedbackMessage, setFeedbackMessage] = useState<{
     type: 'info' | 'warning' | 'error' | 'success';
     text: string;
@@ -36,6 +36,13 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
   const recognitionRef = useRef<any>(null);
 
   const sampleScenario = 'Customer Acme Corp tries submitting an invoice for $4,850 without entering a GST identification number. The app mistakenly shows an invoice created toast instead of validating the GSTIN field.';
+
+  // Keep transcript in sync if props change
+  useEffect(() => {
+    if (voiceReport.rawTranscript && !transcript) {
+      setTranscript(voiceReport.rawTranscript);
+    }
+  }, [voiceReport.rawTranscript]);
 
   // Initialize SpeechRecognition for genuine voice dictation
   useEffect(() => {
@@ -55,6 +62,14 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
           setTranscript(currentTranscript);
           setShowTextInput(true);
           setFeedbackMessage(null);
+
+          const intent = parseWisprVoiceIntent(currentTranscript);
+          onUpdateVoiceReport({
+            ...voiceReport,
+            rawTranscript: currentTranscript,
+            detectedIntent: intent,
+            timestamp: Date.now(),
+          });
         }
       };
 
@@ -96,7 +111,7 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
         try { recognitionRef.current.stop(); } catch (_) {}
       }
     };
-  }, []);
+  }, [voiceReport, onUpdateVoiceReport]);
 
   const handleApplyScenario = async () => {
     setTranscript(sampleScenario);
@@ -106,9 +121,12 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
       text: 'Loaded sample scenario: Acme Corp B2B invoice missing statutory GSTIN.',
     });
     
-    // Attempt backend NLP intent parse
-    const res = await parseVoiceIntentApi(sampleScenario);
-    const intent = res?.intent || parseWisprVoiceIntent(sampleScenario);
+    // Attempt backend NLP intent parse with fallback
+    let intent = parseWisprVoiceIntent(sampleScenario);
+    try {
+      const res = await parseVoiceIntentApi(sampleScenario);
+      if (res?.intent) intent = res.intent;
+    } catch (_) {}
 
     onUpdateVoiceReport({
       ...voiceReport,
@@ -138,7 +156,7 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
           });
           setFeedbackMessage({
             type: 'success',
-            text: 'Voice intent extracted: Statutory GSTIN validation defect identified.',
+            text: `Voice intent extracted: ${intent.actionTaken || 'Defect parameters parsed successfully.'}`,
           });
         } catch {
           const intent = parseWisprVoiceIntent(transcript);
@@ -185,24 +203,24 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
     if (!text.trim()) {
       return;
     }
+    const intent = parseWisprVoiceIntent(text);
+    const updated: VoiceBugReport = {
+      ...voiceReport,
+      rawTranscript: text,
+      detectedIntent: intent,
+      timestamp: Date.now(),
+    };
+    onUpdateVoiceReport(updated);
+
     try {
       const res = await parseVoiceIntentApi(text);
-      const intent = res?.intent || parseWisprVoiceIntent(text);
-      onUpdateVoiceReport({
-        ...voiceReport,
-        rawTranscript: text,
-        detectedIntent: intent,
-        timestamp: Date.now(),
-      });
-    } catch {
-      const intent = parseWisprVoiceIntent(text);
-      onUpdateVoiceReport({
-        ...voiceReport,
-        rawTranscript: text,
-        detectedIntent: intent,
-        timestamp: Date.now(),
-      });
-    }
+      if (res?.intent) {
+        onUpdateVoiceReport({
+          ...updated,
+          detectedIntent: res.intent,
+        });
+      }
+    } catch (_) {}
   };
 
   const handleLaunch = async () => {
@@ -216,19 +234,33 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
       return;
     }
 
+    const intent = parseWisprVoiceIntent(activeText);
+    const updated: VoiceBugReport = {
+      id: `INC-${Date.now().toString().slice(-4)}`,
+      timestamp: Date.now(),
+      rawTranscript: activeText,
+      dictationSource: 'wispr-flow',
+      detectedIntent: intent,
+      isListening: false,
+    };
+
+    onUpdateVoiceReport(updated);
+
     try {
-      const intent = voiceReport.detectedIntent;
       await createIncidentApi({
-        title: intent.actionTaken || 'Commercial invoice statutory GSTIN validation bug',
+        title: intent.actionTaken || 'Application defect reproduction',
         description: activeText,
         status: 'buggy',
         severity: intent.severity || 'critical',
-        tags: [intent.feature || 'invoice', 'gst', 'validation'],
+        tags: [intent.feature || 'voice-repro', 'playwright', 'sandbox'],
         spec_file: 'repro-buggy.spec.ts',
         is_primary_demo: true,
       });
-    } catch (_) {}
-    onLaunchSandbox();
+    } catch (err) {
+      console.warn('Backend sync warning:', err);
+    }
+
+    onLaunchSandbox(updated);
   };
 
   return (
@@ -289,7 +321,7 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
         </div>
 
         <button
-          onClick={onLaunchSandbox}
+          onClick={handleLaunch}
           className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#8174A0] hover:bg-[#6f638d] text-white text-xs font-semibold shadow-xs hover:shadow-md transition-all active:scale-[0.99] cursor-pointer self-start sm:self-auto"
         >
           <Play className="w-3.5 h-3.5 text-[#FFD2A0]" />
@@ -381,7 +413,7 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
               className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-[#FAF7F2] hover:bg-[#F3EFE6] border border-[#D8D2C5] text-xs font-medium text-[#1F1A24] transition-all cursor-pointer shadow-2xs"
             >
               <Clipboard className="w-3.5 h-3.5 text-[#8174A0]" />
-              <span>Paste User Feedback</span>
+              <span>{showTextInput ? 'Hide Text Input' : 'Paste User Feedback'}</span>
             </button>
 
             <button
@@ -401,7 +433,7 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
             </button>
           </div>
 
-          {/* Optional Transcript Box if text exists */}
+          {/* Transcript Box */}
           {showTextInput && (
             <div className="mt-6 pt-5 border-t border-[#EBE7DF] text-left space-y-3">
               <div className="flex items-center justify-between">
@@ -417,19 +449,21 @@ export const NewIncidentPage: React.FC<NewIncidentPageProps> = ({
                 rows={3}
                 value={transcript}
                 onChange={(e) => {
-                  setTranscript(e.target.value);
+                  const val = e.target.value;
+                  setTranscript(val);
                   onUpdateVoiceReport({
                     ...voiceReport,
-                    rawTranscript: e.target.value,
-                    detectedIntent: parseWisprVoiceIntent(e.target.value),
+                    rawTranscript: val,
+                    detectedIntent: parseWisprVoiceIntent(val),
                   });
                 }}
                 onBlur={(e) => handleTranscriptBlur(e.target.value)}
+                placeholder="Speak via microphone or type steps to reproduce..."
                 className="w-full p-3 rounded-xl border border-[#D8D2C5] bg-[#FAF7F2] text-xs text-[#1F1A24] leading-relaxed resize-none focus:outline-none focus:ring-1 focus:ring-[#8174A0]"
               />
               <button
                 onClick={handleLaunch}
-                className="w-full py-2.5 px-4 rounded-xl bg-[#8174A0] hover:bg-[#6f638d] text-white text-xs font-semibold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                className="w-full py-2.5 px-4 rounded-xl bg-[#8174A0] hover:bg-[#6f638d] text-white text-xs font-semibold shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer active:scale-[0.99]"
               >
                 <Play className="w-3.5 h-3.5 text-[#FFD2A0]" />
                 <span>Synthesize Playwright &amp; Run in Sandbox</span>
