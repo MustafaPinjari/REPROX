@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { scrubText, shouldMaskInput, sanitizeInputValue } from '../src/services/privacyScrubber';
-import { parseWisprVoiceIntent, detectVoiceCommand } from '../src/services/voiceDictationEngine';
+import { parseWisprVoiceIntent, detectVoiceCommand, synthesizeTimelineEventsForReport } from '../src/services/voiceDictationEngine';
 import { generatePlaywrightTestScript, formatPlaywrightLocator } from '../src/services/playwrightGenerator';
 import { executePlaywrightTest } from '../src/services/testRunner';
 import { RecordedEvent } from '../src/types';
@@ -35,6 +35,28 @@ describe('Wispr Flow Voice Intent & Command Engine', () => {
     expect(intent.actionTaken).toContain('without');
     expect(intent.expectedOutcome).toContain('GSTIN is required');
     expect(intent.actualOutcome).toContain('Invoice Dispatched Successfully');
+  });
+
+  it('dynamically parses real-world food ordering defect on Zepto without dummy data', () => {
+    const transcript = 'i cant order food on zepto';
+    const intent = parseWisprVoiceIntent(transcript);
+
+    expect(intent.feature).toContain('Zepto');
+    expect(intent.feature).toContain('Food Ordering');
+    expect(intent.actionTaken).toContain('Zepto');
+    expect(intent.expectedOutcome).toContain('Order placed successfully');
+    expect(intent.severity).toBe('critical');
+
+    const events = synthesizeTimelineEventsForReport(transcript, intent);
+    expect(events.length).toBeGreaterThanOrEqual(4);
+    expect(events[0].value).toContain('zeptonow.com');
+    expect(events.some(e => e.targetLabel === 'Place Food Order')).toBe(true);
+
+    const script = generatePlaywrightTestScript(events);
+    expect(script).toContain('https://www.zeptonow.com');
+    expect(script).toContain('Place Food Order');
+    expect(script).not.toContain('Acme Global Ltd');
+    expect(script).not.toContain('GSTIN');
   });
 
   it('detects hands-free voice commands accurately', () => {

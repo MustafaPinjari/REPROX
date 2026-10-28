@@ -8,6 +8,7 @@ interface WisprFlowBarProps {
   onVoiceReportReady?: (report: VoiceBugReport) => void;
   onVoiceCommand?: (command: string) => void;
   activeBuildMode: 'buggy' | 'fixed';
+  rawTranscript?: string;
 }
 
 export const WisprFlowBar: React.FC<WisprFlowBarProps> = ({
@@ -15,11 +16,19 @@ export const WisprFlowBar: React.FC<WisprFlowBarProps> = ({
   onVoiceReportReady,
   onVoiceCommand,
   activeBuildMode,
+  rawTranscript,
 }) => {
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState(
-    'Customer Acme Corp tries submitting an invoice for $4,850 without entering a GST identification number. The app mistakenly shows an invoice created toast instead of validating the GSTIN field.'
+    rawTranscript ||
+      'Customer Acme Corp tries submitting an invoice for $4,850 without entering a GST identification number. The app mistakenly shows an invoice created toast instead of validating the GSTIN field.'
   );
+
+  useEffect(() => {
+    if (rawTranscript !== undefined && rawTranscript !== transcript) {
+      setTranscript(rawTranscript);
+    }
+  }, [rawTranscript]);
   const [audioWave, setAudioWave] = useState<number[]>([14, 28, 42, 22, 50, 34, 24, 12, 38, 20]);
   const [detectedCommand, setDetectedCommand] = useState<string | null>(null);
 

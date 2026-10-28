@@ -14,6 +14,10 @@ import {
   Package, 
   Check, 
   Search,
+  Utensils,
+  Clock,
+  MapPin,
+  ShoppingBag,
 } from 'lucide-react';
 
 interface InvoiceAppSandboxProps {
@@ -33,12 +37,31 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
   scenarioFeature = '',
 }) => {
   const isBuggy = buildMode === 'buggy';
+  const feat = scenarioFeature.toLowerCase();
+  const isFoodDelivery =
+    feat.includes('zepto') ||
+    feat.includes('food') ||
+    feat.includes('swiggy') ||
+    feat.includes('zomato') ||
+    feat.includes('grocery') ||
+    feat.includes('groceries') ||
+    feat.includes('meal') ||
+    (feat.includes('order') && !feat.includes('invoice'));
+
   const isEcommerce =
-    scenarioFeature.toLowerCase().includes('cart') ||
-    scenarioFeature.toLowerCase().includes('amazon') ||
-    scenarioFeature.toLowerCase().includes('shop') ||
-    scenarioFeature.toLowerCase().includes('card') ||
-    scenarioFeature.toLowerCase().includes('product');
+    !isFoodDelivery &&
+    (feat.includes('cart') ||
+      feat.includes('amazon') ||
+      feat.includes('shop') ||
+      feat.includes('product'));
+
+  // -------------------------------------------------------------
+  // ZEPTO / QUICK COMMERCE FOOD DELIVERY STATE
+  // -------------------------------------------------------------
+  const [foodSearch, setFoodSearch] = useState('Fresh Meal Box');
+  const [foodCartCount, setFoodCartCount] = useState<number>(1);
+  const [foodOrderStatus, setFoodOrderStatus] = useState<'idle' | 'failed' | 'confirmed'>('idle');
+  const [foodFeedback, setFoodFeedback] = useState<string | null>(null);
 
   // -------------------------------------------------------------
   // E-COMMERCE / AMAZON STATE
@@ -122,6 +145,88 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
         targetLabel: 'Amazon Product Catalog',
         value: 'https://www.amazon.com/dp/B09V3HB57G',
         description: 'Navigated to Amazon Echo Dot catalog page',
+      });
+    }
+  };
+
+  // -------------------------------------------------------------
+  // ZEPTO / FOOD ACTIONS
+  // -------------------------------------------------------------
+  const handleAddFoodItem = (itemName: string = 'Chef Special Meal Box') => {
+    setFoodCartCount((prev) => prev + 1);
+    record({
+      type: 'click',
+      selector: '#add-food-item-btn',
+      targetRole: 'button',
+      targetLabel: 'Add to Cart',
+      targetTestId: 'btn-add-food-item',
+      description: `Clicked "Add to Cart" for ${itemName}`,
+    });
+  };
+
+  const handlePlaceFoodOrder = () => {
+    record({
+      type: 'click',
+      selector: '#place-order-btn',
+      targetRole: 'button',
+      targetLabel: 'Place Food Order',
+      targetTestId: 'btn-place-order',
+      description: 'Clicked "Place Food Order" button at checkout',
+    });
+
+    if (isBuggy) {
+      setFoodOrderStatus('failed');
+      const err =
+        'Order Failed: Payment Gateway Connection Timeout (Error #ZPT-503). Unable to process food order on Zepto.';
+      setFoodFeedback(err);
+      record({
+        type: 'assert',
+        selector: '[data-testid="order-error"]',
+        targetRole: 'alert',
+        targetTestId: 'order-error',
+        value: 'Payment Gateway Connection Timeout (#ZPT-503)',
+        description: 'Failed assert: Food order placement failed on Zepto with gateway timeout',
+      });
+    } else {
+      setFoodOrderStatus('confirmed');
+      const succ =
+        '✓ Order Confirmed! Order #ZPT-88942 placed. Arriving in 10 mins with live delivery tracking.';
+      setFoodFeedback(succ);
+      record({
+        type: 'assert',
+        selector: '[data-testid="order-confirmation"]',
+        targetRole: 'status',
+        targetTestId: 'order-confirmation',
+        value: 'Order Confirmed - Arriving in 10 mins',
+        description: 'Verified assert: Food order successfully placed on Zepto with confirmed 10-minute ETA',
+      });
+    }
+  };
+
+  const populateFoodBug = () => {
+    setFoodCartCount(1);
+    setFoodOrderStatus('idle');
+    setFoodFeedback(null);
+    if (isRecording && onRecordEvent) {
+      onRecordEvent({
+        type: 'navigate',
+        selector: 'https://www.zeptonow.com',
+        targetLabel: 'Zepto Food & Quick Commerce Platform',
+        value: 'https://www.zeptonow.com',
+        description: 'Navigate to Zepto delivery portal',
+      });
+      onRecordEvent({
+        type: 'fill',
+        selector: 'input[placeholder*="Search"]',
+        targetLabel: 'Search for groceries & food',
+        value: 'Fresh Meal Box',
+        description: 'Searched for food item: "Fresh Meal Box"',
+      });
+      onRecordEvent({
+        type: 'click',
+        selector: '#add-food-item-btn',
+        targetLabel: 'Add to Cart',
+        description: 'Added item to cart',
       });
     }
   };
@@ -256,7 +361,11 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
           <span className="text-xs font-mono font-bold text-slate-800">
             TARGET APP SANDBOX:{' '}
             <strong className="text-[#8174A0] font-extrabold">
-              {isEcommerce ? 'Amazon.com Product & Cart Pipeline' : 'LedgerFlow Commercial Billing'}
+              {isFoodDelivery
+                ? 'Zepto Quick Commerce & Food Delivery (10-Min Live Pipeline)'
+                : isEcommerce
+                ? 'Amazon.com Product & Cart Pipeline'
+                : 'LedgerFlow Commercial Billing'}
             </strong>
           </span>
         </div>
@@ -270,6 +379,8 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
               setErrorMessage(null);
               setSuccessToast(null);
               setCartFeedback(null);
+              setFoodOrderStatus('idle');
+              setFoodFeedback(null);
             }}
             className={`px-3 py-1 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
               isBuggy
@@ -288,6 +399,8 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
               setErrorMessage(null);
               setSuccessToast(null);
               setCartFeedback(null);
+              setFoodOrderStatus('idle');
+              setFoodFeedback(null);
             }}
             className={`px-3 py-1 text-xs font-mono rounded-lg flex items-center gap-1.5 transition-all cursor-pointer ${
               !isBuggy
@@ -315,7 +428,9 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
               <span>
                 <strong className="font-bold">BUG ACTIVE:</strong>{' '}
-                {isEcommerce
+                {isFoodDelivery
+                  ? 'Payment Gateway timeout (#ZPT-503). Food order fails to place during checkout.'
+                  : isEcommerce
                   ? 'Add-to-cart mutation dropped. Shopping cart badge (#nav-cart-count) remains 0.'
                   : 'Missing GSTIN validation guard. Commercial invoices submit without required GST.'}
               </span>
@@ -325,7 +440,9 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
               <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>
                 <strong className="font-bold">PATCHED:</strong>{' '}
-                {isEcommerce
+                {isFoodDelivery
+                  ? 'Resilient retry activated. Food order placed with live tracking (ETA 10 mins).'
+                  : isEcommerce
                   ? 'Session cart state persists. Shopping cart badge (#nav-cart-count) updates to 1.'
                   : 'Guard clause active. Empty GSTIN halts dispatch with accessible error alert.'}
               </span>
@@ -335,7 +452,7 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
 
         <button
           type="button"
-          onClick={isEcommerce ? populateEcommerceBug : populateInvoiceBug}
+          onClick={isFoodDelivery ? populateFoodBug : isEcommerce ? populateEcommerceBug : populateInvoiceBug}
           className="text-xs font-bold bg-white hover:bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg border border-slate-300 flex items-center gap-1 transition shadow-xs cursor-pointer"
         >
           <Sparkles className="w-3.5 h-3.5 text-amber-500" />
@@ -344,9 +461,158 @@ export const InvoiceAppSandbox: React.FC<InvoiceAppSandboxProps> = ({
       </div>
 
       {/* ───────────────────────────────────────────────────────────── */}
-      {/* SCENARIO A: AMAZON / E-COMMERCE CART REPRODUCTION */}
+      {/* SCENARIO A: ZEPTO / QUICK COMMERCE FOOD DELIVERY */}
       {/* ───────────────────────────────────────────────────────────── */}
-      {isEcommerce ? (
+      {isFoodDelivery ? (
+        <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
+          {/* Zepto Header */}
+          <div className="bg-gradient-to-r from-[#3E0065] to-[#5C0099] text-white p-3.5 rounded-xl flex items-center justify-between gap-3 shadow-sm border border-purple-900/30">
+            <div className="flex items-center gap-2.5">
+              <span className="font-black text-xl tracking-tight text-[#FF3278] flex items-center drop-shadow-xs">
+                zepto
+              </span>
+              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase bg-[#FFD700] text-purple-950 px-2 py-0.5 rounded-full font-mono shadow-xs">
+                <Clock className="w-3 h-3" />
+                10 MINS
+              </span>
+              <span className="hidden sm:inline-flex items-center gap-1 text-[11px] text-purple-200">
+                <MapPin className="w-3 h-3 text-[#FF3278]" />
+                Deliver to: Home (Floor 4)
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div
+                id="nav-food-cart"
+                data-testid="nav-food-cart"
+                className="flex items-center gap-1.5 bg-white/15 hover:bg-white/25 px-3 py-1.5 rounded-lg transition-all cursor-pointer"
+              >
+                <div className="relative">
+                  <ShoppingBag className="w-4 h-4 text-white" />
+                  <span
+                    id="food-cart-count"
+                    data-testid="food-cart-count"
+                    className="absolute -top-1.5 -right-2 bg-[#FF3278] text-white font-black text-[9px] rounded-full w-4 h-4 flex items-center justify-center font-mono"
+                  >
+                    {foodCartCount}
+                  </span>
+                </div>
+                <span className="text-xs font-bold text-white hidden sm:inline">Cart</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-purple-400" />
+            <input
+              type="text"
+              placeholder="Search for 'fresh meal, snacks, biryani, pizza'..."
+              value={foodSearch}
+              onChange={(e) => {
+                setFoodSearch(e.target.value);
+                record({
+                  type: 'fill',
+                  selector: 'input[placeholder*="Search"]',
+                  targetLabel: 'Search for groceries & food',
+                  value: e.target.value,
+                  description: `Searched catalog for: "${e.target.value}"`,
+                });
+              }}
+              className="w-full pl-8 pr-3 py-2 rounded-xl border border-purple-200 bg-purple-50/30 text-xs text-slate-800 placeholder-purple-400 focus:outline-none focus:ring-2 focus:ring-purple-400/40"
+            />
+          </div>
+
+          {/* Feedback Banner */}
+          {foodFeedback && (
+            <div
+              data-testid={foodOrderStatus === 'failed' ? 'order-error' : 'order-confirmation'}
+              role={foodOrderStatus === 'failed' ? 'alert' : 'status'}
+              className={`p-3 rounded-xl text-xs flex items-start gap-2.5 animate-in fade-in shadow-xs ${
+                foodOrderStatus === 'failed'
+                  ? 'bg-rose-50 border border-rose-300 text-rose-900'
+                  : 'bg-emerald-50 border border-emerald-300 text-emerald-900'
+              }`}
+            >
+              {foodOrderStatus === 'failed' ? (
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+              ) : (
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+              )}
+              <div className="space-y-0.5">
+                <span className="font-extrabold block">
+                  {foodOrderStatus === 'failed' ? 'Defect Active (Reproduction Verified)' : 'Verification Succeeded'}
+                </span>
+                <span className="leading-relaxed font-medium">{foodFeedback}</span>
+              </div>
+            </div>
+          )}
+
+          {/* Food Menu Item Card */}
+          <div className="border border-purple-100 bg-white rounded-xl p-3.5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 border border-orange-200 flex items-center justify-center shrink-0 text-orange-600">
+                <Utensils className="w-7 h-7" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-black text-slate-900">Fresh Gourmet Biryani &amp; Meal Box</span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                    Bestseller
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  Chef-curated warm basmati rice meal, fresh raita &amp; dessert. 10 mins prep.
+                </p>
+                <div className="flex items-center gap-2 mt-1 font-mono">
+                  <span className="text-xs font-extrabold text-purple-950">$8.49</span>
+                  <span className="text-[10px] line-through text-slate-400">$11.99</span>
+                  <span className="text-[10px] font-bold text-emerald-600">30% OFF</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              id="add-food-item-btn"
+              data-testid="btn-add-food-item"
+              type="button"
+              onClick={() => handleAddFoodItem('Fresh Gourmet Biryani Box')}
+              className="w-full sm:w-auto px-4 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 text-xs font-bold transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-1.5"
+            >
+              <ShoppingBag className="w-3.5 h-3.5 text-purple-700" />
+              <span>Add to Cart ({foodCartCount})</span>
+            </button>
+          </div>
+
+          {/* Order Checkout Footer */}
+          <div className="bg-purple-50/70 border border-purple-200/80 rounded-xl p-3.5 flex flex-col sm:flex-row items-center justify-between gap-3">
+            <div className="text-xs space-y-0.5 w-full sm:w-auto">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-800">Bill Total (1 Item):</span>
+                <span className="font-mono font-black text-purple-950 text-sm">$8.49</span>
+              </div>
+              <span className="text-[10px] text-emerald-700 font-semibold block">
+                ⚡ 10-Minute Superfast Free Delivery Applied
+              </span>
+            </div>
+
+            <button
+              id="place-order-btn"
+              data-testid="btn-place-order"
+              type="button"
+              onClick={handlePlaceFoodOrder}
+              className={`w-full sm:w-auto px-6 py-2.5 rounded-xl font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer flex items-center justify-center gap-2 ${
+                isBuggy
+                  ? 'bg-gradient-to-r from-[#FF3278] to-purple-700 hover:from-[#e02667] hover:to-purple-800 text-white shadow-rose-500/20'
+                  : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/20'
+              }`}
+            >
+              <Utensils className="w-3.5 h-3.5" />
+              <span>Place Food Order</span>
+            </button>
+          </div>
+        </div>
+      ) : isEcommerce ? (
         <div className="p-4 sm:p-5 overflow-y-auto flex-1 space-y-4">
           {/* Mock Amazon Header */}
           <div className="bg-[#131921] text-white p-3 rounded-xl flex items-center justify-between gap-3 shadow-xs">

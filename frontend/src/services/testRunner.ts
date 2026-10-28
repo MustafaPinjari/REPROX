@@ -192,10 +192,17 @@ export async function executePlaywrightTest(options: RunOptions): Promise<TestEx
       stepResult.expectedValue = stepDef.expectedValue;
       stepResult.actualValue = 'Target state omitted or action failed to mutate state';
 
+      const isInvoiceScenario = (!events || events.length === 0) || events.some((e) => e.selector?.includes('gst') || e.selector?.includes('client'));
+      const receivedVal = isInvoiceScenario
+        ? 'Toast "Invoice Dispatched Successfully" bypasses validation'
+        : (title.toLowerCase().includes('food') || title.toLowerCase().includes('zepto'))
+        ? 'Payment Gateway Connection Timeout (#ZPT-503)'
+        : 'State update failed or element was not rendered';
+
       failureSignature = {
         step: i + 1,
         expected: `Target state verified with value: "${stepDef.expectedValue}"`,
-        received: 'State update failed or element was not rendered',
+        received: receivedVal,
         location: `tests/repro-buggy.spec.ts:${25 + i}:5`,
       };
       steps.push(stepResult);

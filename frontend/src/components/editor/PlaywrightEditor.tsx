@@ -4,13 +4,17 @@ import { Copy, Check, Download, Terminal, RefreshCw, FileCode } from 'lucide-rea
 interface PlaywrightEditorProps {
   code: string;
   onRegenerateCode?: () => void;
+  specFilename?: string;
 }
 
 export const PlaywrightEditor: React.FC<PlaywrightEditorProps> = ({
   code,
   onRegenerateCode,
+  specFilename = 'tests/repro-scenario.spec.ts',
 }) => {
   const [copied, setCopied] = useState(false);
+
+  const cleanFilename = specFilename.includes('/') ? specFilename.split('/').pop()! : specFilename;
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(code);
@@ -22,7 +26,7 @@ export const PlaywrightEditor: React.FC<PlaywrightEditorProps> = ({
     const element = document.createElement('a');
     const file = new Blob([code], { type: 'text/typescript' });
     element.href = URL.createObjectURL(file);
-    element.download = 'invoice-gst.spec.ts';
+    element.download = cleanFilename;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
@@ -37,7 +41,7 @@ export const PlaywrightEditor: React.FC<PlaywrightEditorProps> = ({
         <div className="flex items-center gap-2.5">
           <FileCode className="w-4 h-4 text-violet-600" />
           <span className="text-xs font-mono font-extrabold text-slate-900">
-            tests/invoice-gst.spec.ts
+            {specFilename.startsWith('tests/') ? specFilename : `tests/${cleanFilename}`}
           </span>
           <span className="text-[10px] font-mono bg-violet-100 text-violet-800 border border-violet-200 px-2 py-0.5 rounded-full font-bold">
             Playwright v1.49 Spec
@@ -115,7 +119,7 @@ export const PlaywrightEditor: React.FC<PlaywrightEditorProps> = ({
       <div className="px-4 py-2.5 bg-slate-100/80 text-xs flex items-center justify-between text-slate-600 font-mono">
         <span className="flex items-center gap-2 truncate">
           <Terminal className="w-4 h-4 text-violet-600 shrink-0" />
-          <span className="text-slate-800 font-bold">npx playwright test tests/invoice-gst.spec.ts</span>
+          <span className="text-slate-800 font-bold">npx playwright test tests/{cleanFilename}</span>
         </span>
         <span className="text-emerald-700 font-extrabold text-[11px] shrink-0">
           GENUINE PLAYWRIGHT CLI

@@ -402,6 +402,7 @@ export const IncidentsPage: React.FC<IncidentsPageProps> = ({
           <WisprFlowBar
             activeBuildMode={buildMode}
             onVoiceReportReady={onVoiceReportReceived}
+            rawTranscript={voiceReport.rawTranscript}
           />
 
           {/* Dual Column Sandbox & Test Verifier */}
@@ -432,10 +433,26 @@ export const IncidentsPage: React.FC<IncidentsPageProps> = ({
             {/* Right: Generated Playwright Editor & Real Execution Results */}
             <div className="xl:col-span-6 space-y-6 flex flex-col">
               <div className="h-[460px]">
-                <PlaywrightEditor
-                  code={generatedCode}
-                  onRegenerateCode={onRegenerateCode}
-                />
+                {(() => {
+                  const featLower = (voiceReport.detectedIntent.feature || '').toLowerCase();
+                  const specFilename =
+                    featLower.includes('zepto') || featLower.includes('food')
+                      ? 'tests/zepto-food-order.spec.ts'
+                      : featLower.includes('amazon') || featLower.includes('cart')
+                      ? 'tests/amazon-cart.spec.ts'
+                      : featLower.includes('auth') || featLower.includes('login')
+                      ? 'tests/auth-portal.spec.ts'
+                      : featLower.includes('invoice') || featLower.includes('gst')
+                      ? 'tests/invoice-gst.spec.ts'
+                      : 'tests/repro-scenario.spec.ts';
+                  return (
+                    <PlaywrightEditor
+                      code={generatedCode}
+                      onRegenerateCode={onRegenerateCode}
+                      specFilename={specFilename}
+                    />
+                  );
+                })()}
               </div>
 
               <div className="h-[360px]">

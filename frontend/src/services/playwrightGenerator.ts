@@ -35,9 +35,30 @@ export function generatePlaywrightTestScript(
     expectedErrorMessage?: string;
   }
 ): string {
-  const testName = options?.testName || 'Spoken Incident Reproduction Verification';
-  const targetUrl = options?.targetUrl || 'http://localhost:3000/sandbox';
-  const expectedErrorMessage = options?.expectedErrorMessage || 'Action completed with verified state';
+  const isInvoice = events.some(
+    (e) =>
+      e.selector?.includes('client') ||
+      e.selector?.includes('gst') ||
+      e.targetLabel?.includes('GST') ||
+      e.targetLabel?.includes('Client')
+  );
+  const isFood = events.some(
+    (e) =>
+      e.selector?.includes('food') ||
+      e.selector?.includes('order') ||
+      e.targetLabel?.includes('food') ||
+      e.targetLabel?.includes('Order')
+  );
+
+  const defaultMsg = isInvoice
+    ? 'GSTIN is required for commercial invoices.'
+    : isFood
+    ? 'Order Confirmed - Arriving in 10 mins'
+    : 'Action completed with verified state';
+
+  const testName = options?.testName || (isFood ? 'Zepto Food Order Reproduction Verification' : 'Spoken Incident Reproduction Verification');
+  const targetUrl = options?.targetUrl || (isFood ? 'https://www.zeptonow.com' : 'http://localhost:3000/sandbox');
+  const expectedErrorMessage = options?.expectedErrorMessage || defaultMsg;
 
   const stepLines: string[] = [];
 

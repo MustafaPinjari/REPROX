@@ -24,18 +24,33 @@ def parse_natural_language_intent(transcript: str):
 
     # 1. Feature detection
     feature = 'invoice-gstin'
-    if 'invoice' in lower or 'gst' in lower or 'tax' in lower:
+    if 'food' in lower or 'zepto' in lower or 'swiggy' in lower or 'zomato' in lower or 'grocery' in lower or 'order' in lower and ('food' in lower or 'meal' in lower or 'dish' in lower or 'zepto' in lower or 'deliver' in lower):
+        feature = 'zepto-food-order'
+    elif 'invoice' in lower or 'gst' in lower or 'tax' in lower:
         feature = 'invoice-gstin'
     elif 'login' in lower or 'auth' in lower or 'password' in lower:
         feature = 'authentication'
     elif 'profile' in lower or 'setting' in lower:
         feature = 'settings'
+    elif 'cart' in lower or 'amazon' in lower or 'shop' in lower:
+        feature = 'ecommerce-cart'
 
-    # 2. Extract Client Name entity
+    # 2. Extract Client / App Name entity
     client_name = 'Acme Global Ltd'
-    client_match = re.search(r'(?:customer|client|company|for)\s+([A-Za-z0-9\s]+?)(?:\s+tries|\s+attempts|\s+submits|\s+orders|\s+without)', transcript, re.IGNORECASE)
-    if client_match:
-        client_name = client_match.group(1).strip()
+    if 'zepto' in lower:
+        client_name = 'Zepto Quick Commerce'
+    elif 'amazon' in lower:
+        client_name = 'Amazon Retail'
+    elif 'swiggy' in lower:
+        client_name = 'Swiggy Food Delivery'
+    elif 'zomato' in lower:
+        client_name = 'Zomato Food Delivery'
+    else:
+        client_match = re.search(r'(?:customer|client|company|for|on|in)\s+([A-Za-z0-9\s]+?)(?:\s+tries|\s+attempts|\s+submits|\s+orders|\s+without|\s+app|\s+website|$)', transcript, re.IGNORECASE)
+        if client_match:
+            candidate = client_match.group(1).strip()
+            if candidate and len(candidate) <= 30:
+                client_name = candidate
 
     # 3. Extract Amount entity
     amount = '4850.00'
@@ -44,16 +59,42 @@ def parse_natural_language_intent(transcript: str):
         amount = amount_match.group(1).replace(',', '')
 
     # 4. Action & Outcomes
-    action_taken = 'Submitted invoice without mandatory GSTIN'
-    if 'without' in lower:
-        action_taken = "Submitted invoice omitting statutory identification"
-
-    expected_outcome = 'Application displays statutory GSTIN validation error banner with role="alert"'
-    actual_outcome = 'Application bypassed validation and displayed erroneous success state'
+    if feature == 'zepto-food-order':
+        action_taken = 'Placing food & groceries order on Zepto'
+        expected_outcome = 'Order placed successfully with confirmed ETA within 10 minutes'
+        actual_outcome = transcript if transcript else 'Cannot order food; checkout or order submission fails'
+        target_selector = '#place-order-btn'
+        assertion_selector = '[data-testid="order-confirmation"]'
+    elif feature == 'ecommerce-cart':
+        action_taken = 'Adding selected product item to shopping cart'
+        expected_outcome = 'Item attached to cart session with cart badge count incrementing to 1'
+        actual_outcome = transcript if transcript else 'Item is not added to cart; count remains 0'
+        target_selector = '#add-to-cart-button'
+        assertion_selector = '#nav-cart-count'
+    elif feature == 'authentication':
+        action_taken = 'Submitting user credentials on authentication portal'
+        expected_outcome = 'Authenticated user issued session token and redirected to dashboard'
+        actual_outcome = transcript if transcript else 'Authentication rejected; session token missing or login loop triggered'
+        target_selector = '#submitLoginBtn'
+        assertion_selector = '[data-testid="user-dashboard"]'
+    elif feature == 'settings':
+        action_taken = 'Updating account and application settings'
+        expected_outcome = 'Settings preferences saved with confirmed success banner'
+        actual_outcome = transcript if transcript else 'Settings update failed or threw unhandled exception'
+        target_selector = '#saveSettingsBtn'
+        assertion_selector = '[role="alert"]'
+    else:
+        action_taken = 'Submitted invoice without mandatory GSTIN'
+        if 'without' in lower:
+            action_taken = "Submitted invoice omitting statutory identification"
+        expected_outcome = 'Application displays statutory GSTIN validation error banner with role="alert"'
+        actual_outcome = 'Application bypassed validation and displayed erroneous success state'
+        target_selector = '#gstinNumber'
+        assertion_selector = '[role="alert"]'
 
     # 5. Severity
     severity = 'critical'
-    if 'security' in lower or 'tax' in lower or 'gst' in lower or 'payment' in lower:
+    if 'security' in lower or 'tax' in lower or 'gst' in lower or 'payment' in lower or 'order' in lower or 'food' in lower or 'cant' in lower or "can't" in lower:
         severity = 'critical'
     elif 'slow' in lower or 'color' in lower:
         severity = 'low'
@@ -68,8 +109,8 @@ def parse_natural_language_intent(transcript: str):
         'expectedOutcome': expected_outcome,
         'actualOutcome': actual_outcome,
         'severity': severity,
-        'targetSelector': '#gstinNumber',
-        'assertionSelector': '[role="alert"]',
+        'targetSelector': target_selector,
+        'assertionSelector': assertion_selector,
         'confidence': 0.984
     }
 
